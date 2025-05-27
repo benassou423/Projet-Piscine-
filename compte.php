@@ -1,116 +1,166 @@
 <?php
-ini_set('display_errors', 1);
-error_reporting(E_ALL);
 session_start();
+$database = "agora"; // Mets ici le nom réel de ta BDD !
+$db_handle = mysqli_connect('localhost', 'root', 'root');
+$db_found = mysqli_select_db($db_handle, $database);
 
-// Connexion MySQLi
-$host     = 'localhost';
-$user     = 'root';
-$password = 'root';
-$database = 'piscine';
+$message_connexion = "";
+$message_inscription = "";
 
-$db = mysqli_connect($host, $user, $password, $database);
-if (!$db) {
-    die('Erreur de connexion MySQL : ' . mysqli_connect_error());
+// Traitement connexion
+if (isset($_POST['action']) && $_POST['action'] == 'connexion' && $db_found) {
+    $email = mysqli_real_escape_string($db_handle, trim($_POST['email']));
+    $password = $_POST['password'];
+    $sql = "SELECT id, nom, prenom, email, mot_de_passe, role FROM Utilisateur WHERE email = '$email'";
+    $result = mysqli_query($db_handle, $sql);
+    if ($result && mysqli_num_rows($result) == 1) {
+        $user = mysqli_fetch_assoc($result);
+        if (password_verify($password, $user['mot_de_passe'])) {
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['user_nom'] = $user['nom'];
+            $_SESSION['user_prenom'] = $user['prenom'];
+            $_SESSION['user_role'] = $user['role'];
+            $_SESSION['user_email'] = $user['email'];
+            header("Location: compte.php");
+            exit();
+        } else {
+            $message_connexion = "Mot de passe incorrect.";
+        }
+    } else {
+        $message_connexion = "Utilisateur non trouvé.";
+    }
 }
 
-$errors = [];
-$success = false;
-
-// Si formulaire soumis
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Récupération & nettoyage
-    $nom      = trim($_POST['nom'] ?? '');
-    $prenom   = trim($_POST['prenom'] ?? '');
-    $email    = trim($_POST['email'] ?? '');
-    $mdp      = $_POST['mot_de_passe'] ?? '';
-    $mdp2     = $_POST['mot_de_passe2'] ?? '';
-    $role     = $_POST['role'] ?? '';
-
-    // Validations
-    if ($nom === '' || $prenom === '') {
-        $errors[] = "Le nom et le prénom sont obligatoires.";
-    }
-    if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $errors[] = "Adresse e-mail invalide.";
-    }
-    if (strlen($mdp) < 6) {
-        $errors[] = "Le mot de passe doit contenir au moins 6 caractères.";
-    }
-    if ($mdp !== $mdp2) {
-        $errors[] = "Les mots de passe ne correspondent pas.";
-    }
-    $allowedRoles = ['client','prestataire','admin'];
-    if (! in_array($role, $allowedRoles, true)) {
-        $errors[] = "Rôle invalide.";
-    }
-
-    // Unicité de l’email
-    if (empty($errors)) {
-        $sql  = "SELECT COUNT(*) FROM utilisateur WHERE email = ?";
-        $stmt = mysqli_prepare($db, $sql);
-        mysqli_stmt_bind_param($stmt, 's', $email);
-        mysqli_stmt_execute($stmt);
-        mysqli_stmt_bind_result($stmt, $count);
-        mysqli_stmt_fetch($stmt);
-        mysqli_stmt_close($stmt);
-
-        if ($count > 0) {
-            $errors[] = "Cet e-mail est déjà utilisé.";
+// Traitement inscription
+if (isset($_POST['action']) && $_POST['action'] == 'inscription' && $db_found) {
+    $nom      = mysqli_real_escape_string($db_handle, trim($_POST['nom']));
+    $prenom   = mysqli_real_escape_string($db_handle, trim($_POST['prenom']));
+    $email    = mysqli_real_escape_string($db_handle, trim($_POST['email']));
+    $password = $_POST['password'];
+    $password2 = $_POST['password2'];
+    $adresse1 = mysqli_real_escape_string($db_handle, trim($_POST['adresse1']));
+    $adresse2 = mysqli_real_escape_string($db_handle, trim($_POST['adresse2']));
+    $ville    = mysqli_real_escape_string($db_handle, trim($_POST['ville']));
+    $cp       = mysqli_real_escape_string($db_handle, trim($_POST['code_postal']));
+    $pays     = mysqli_real_escape_string($db_handle, trim($_POST['pays']));
+    $tel      = mysqli_real_escape_string($db_handle, trim($_POST['telephone']));
+    if ($password !== $password2) {
+        $message_inscription = "Les mots de passe ne correspondent pas.";
+    } else {
+        $sql = "SELECT id FROM Utilisateur WHERE email = '$email'";
+        $result = mysqli_query($db_handle, $sql);
+        if (mysqli_num_rows($result) > 0) {
+            $message_inscription = "Cet email est déjà utilisé.";
+        } else {
+            $hash = password_hash($password, PASSWORD_BCRYPT);
+            $sql = "INSERT INTO Utilisateur 
+                (nom, prenom, email, mot_de_passe, role, adresse_ligne1, adresse_ligne2, ville, code_postal, pays, telephone)
+                VALUES 
+                ('$nom', '$prenom', '$email', '$hash', 'acheteur', '$adresse1', '$adresse2', '$ville', '$cp', '$pays', '$tel')";
+            if (mysqli_query($db_handle, $sql)) {
+                $message_inscription = "Inscription réussie ! Vous pouvez vous connecter.";
+            } else {
+                $message_inscription = "Erreur lors de l'inscription : " . mysqli_error($db_handle);
+            }
         }
     }
+} elseif (!$db_found) {
+    $message_connexion = "Base de données non trouvée.";
+    $message_inscription = "Base de données non trouvée.";
+}
 
-    // Insertion si pas d’erreur
-    if (empty($errors)) {
-        $hash = password_hash($mdp, PASSWORD_DEFAULT);
-        $sql  = "INSERT INTO utilisateur (nom, prenom, email, mot_de_passe, role)
-                 VALUES (?, ?, ?, ?, ?)";
-        $stmt = mysqli_prepare($db, $sql);
-        mysqli_stmt_bind_param($stmt, 'sssss', $nom, $prenom, $email, $hash, $role);
-        $success = mysqli_stmt_execute($stmt);
-        mysqli_stmt_close($stmt);
-    }
+// Affichage compte connecté
+if (isset($_SESSION['user_id'])) {
+    $prenom = htmlspecialchars($_SESSION['user_prenom']);
+    $nom = htmlspecialchars($_SESSION['user_nom']);
+    $role = htmlspecialchars($_SESSION['user_role']);
+    echo <<<HTML
+    <!DOCTYPE html>
+    <html lang="fr">
+    <head>
+        <meta charset="UTF-8">
+        <title>Mon compte - Agora Francia</title>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+        <link rel="stylesheet" href="css/style.css">
+    </head>
+    <body>
+    <div class="container">
+        <h2 class="mb-4 text-primary text-center">Bienvenue $prenom $nom</h2>
+        <p class="text-center">Vous êtes connecté en tant que <strong>$role</strong>.</p>
+        <div class="d-grid gap-2 mt-4">
+            <a href="logout.php" class="btn btn-danger">Se déconnecter</a>
+            <a href="index.php" class="btn btn-secondary">Retour à l'accueil</a>
+        </div>
+    </div>
+    </body>
+    </html>
+    HTML;
+    exit();
 }
 ?>
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <title>Inscription – Résultat</title>
-  <link
-    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
-    rel="stylesheet"
-  >
+    <meta charset="UTF-8">
+    <title>Votre Compte - Agora Francia</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/style.css">
 </head>
-<body class="bg-light">
-  <div class="container py-5">
-    <?php if ($_SERVER['REQUEST_METHOD'] === 'POST'): ?>
-
-      <?php if ($success): ?>
-        <div class="alert alert-success">
-          ✅ Votre compte a bien été créé.
+<body>
+<div class="container">
+    <h2 class="mb-4 text-primary text-center">Votre Compte Agora Francia</h2>
+    <ul class="nav nav-tabs" id="tab-compte" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="connexion-tab" data-bs-toggle="tab" data-bs-target="#connexion" type="button" role="tab">Connexion</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="inscription-tab" data-bs-toggle="tab" data-bs-target="#inscription" type="button" role="tab">Inscription</button>
+        </li>
+    </ul>
+    <div class="tab-content" id="tabContentCompte">
+        <!-- Connexion -->
+        <div class="tab-pane fade show active" id="connexion" role="tabpanel">
+            <?php if ($message_connexion): ?>
+                <div class="alert alert-danger"><?= $message_connexion ?></div>
+            <?php endif; ?>
+            <form method="post">
+                <input type="hidden" name="action" value="connexion">
+                <div class="mb-3"><input required name="email" type="email" class="form-control" placeholder="Email"></div>
+                <div class="mb-3"><input required name="password" type="password" class="form-control" placeholder="Mot de passe"></div>
+                <button type="submit" class="btn btn-primary w-100">Se connecter</button>
+            </form>
         </div>
-        <p class="text-center">
-          <a href="compte.html" class="btn btn-primary">Se connecter</a>
-        </p>
-
-      <?php else: ?>
-        <div class="alert alert-danger">
-          <h5>⚠️ Erreurs lors de l’inscription :</h5>
-          <ul class="mb-0">
-            <?php foreach ($errors as $e): ?>
-              <li><?= htmlspecialchars($e) ?></li>
-            <?php endforeach; ?>
-          </ul>
+        <!-- Inscription -->
+        <div class="tab-pane fade" id="inscription" role="tabpanel">
+            <?php if ($message_inscription): ?>
+                <div class="alert alert-info"><?= $message_inscription ?></div>
+            <?php endif; ?>
+            <form method="post">
+                <input type="hidden" name="action" value="inscription">
+                <div class="mb-2"><input required name="nom" type="text" class="form-control" placeholder="Nom"></div>
+                <div class="mb-2"><input required name="prenom" type="text" class="form-control" placeholder="Prénom"></div>
+                <div class="mb-2"><input required name="email" type="email" class="form-control" placeholder="Email"></div>
+                <div class="mb-2"><input required name="password" type="password" class="form-control" placeholder="Mot de passe"></div>
+                <div class="mb-2"><input required name="password2" type="password" class="form-control" placeholder="Confirmer mot de passe"></div>
+                <div class="mb-2"><input name="adresse1" type="text" class="form-control" placeholder="Adresse (ligne 1)"></div>
+                <div class="mb-2"><input name="adresse2" type="text" class="form-control" placeholder="Adresse (ligne 2)"></div>
+                <div class="mb-2"><input name="ville" type="text" class="form-control" placeholder="Ville"></div>
+                <div class="mb-2"><input name="code_postal" type="text" class="form-control" placeholder="Code postal"></div>
+                <div class="mb-2"><input name="pays" type="text" class="form-control" placeholder="Pays"></div>
+                <div class="mb-3"><input name="telephone" type="text" class="form-control" placeholder="Téléphone"></div>
+                <button type="submit" class="btn btn-success w-100">S'inscrire</button>
+            </form>
         </div>
-        <p><a href="inscription.html" class="btn btn-outline-primary">← Revenir au formulaire</a></p>
-      <?php endif; ?>
-
-    <?php else: ?>
-      <div class="alert alert-info">
-        Merci de passer par <a href="inscription.html">le formulaire d’inscription</a>.
-      </div>
-    <?php endif; ?>
-  </div>
+    </div>
+</div>
+<!-- Bootstrap JS for tabs -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// Afficher l’onglet inscription si erreur lors de l’inscription
+<?php if (!empty($message_inscription)) : ?>
+    var tab = new bootstrap.Tab(document.getElementById('inscription-tab'));
+    tab.show();
+<?php endif; ?>
+</script>
 </body>
 </html>
