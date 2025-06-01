@@ -3,7 +3,7 @@ session_start();
 date_default_timezone_set('Europe/Paris');
 
 $database = "agora";
-$db_handle = mysqli_connect('localhost', 'root', 'root');
+$db_handle = mysqli_connect('localhost', 'root', '');
 $db_found = mysqli_select_db($db_handle, $database);
 
 // Vérifie que l'utilisateur est connecté
@@ -35,17 +35,17 @@ mysqli_data_seek($result, 0);
     <meta charset="UTF-8">
     <title>Mes notifications</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/style-site.css">
 </head>
 <body>
 <div class="container my-4">
 
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <a href="index.php" class="btn btn-secondary">&larr; Retour au menu</a>
+        <a href="index.php" class="btn btn-secondary">&larr; Retour au menu</a> <!-- larr = left arrow -->
         <h2 class="text-primary mb-0">Mes notifications</h2>
         <a href="alertes.php" class="btn btn-outline-primary">+ Créer une alerte</a>
     </div>
 
-    <!-- Debug complet des notifs reçues -->
 
 
     <?php if (empty($allNotifs)): ?>
@@ -53,8 +53,8 @@ mysqli_data_seek($result, 0);
     <?php endif; ?>
 
     <?php while ($notif = mysqli_fetch_assoc($result)): ?>
-        <div class="alert <?= $notif['lu'] ? 'alert-secondary' : 'alert-info' ?>">
-            <b>[<?= $notif['id'] ?>]</b>
+        <div class="alert <?= $notif['lu'] ? 'alert-secondary' : 'alert-info' ?>"> <!-- si la notif est lu on met alert secondary sinon alert info -->
+            <b>[<?= $notif['id'] ?>]</b> <!-- pour écrire la variable notif[id] -->
             <?= htmlspecialchars($notif['contenu']) ?><br>
             <small><?= $notif['date_creation'] ?></small>
             <?php if (!empty($notif['article_id'])): ?>
